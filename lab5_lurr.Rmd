@@ -45,7 +45,21 @@ Join the two data sets.
 If you have accessed outside data to help increase the performance of your models for the final project (e.g., [NCES](https://nces.ed.gov/)), you can read in and join those data as well.
 
 ```{r}
+train <- rio::import("data/train.csv") %>% 
+  select(-classification)
 
+eth <- rio::import(here::here("data", "fallmembershipreport_20192020.xlsx"), 
+            sheet    = "School (19-20)",
+            setclass = "tibble") %>%
+  janitor::clean_names() %>%
+  select(attnd_schl_inst_id = attending_school_id,
+         sch_name           = school_name,
+         matches("percent"))
+
+names(eth) <- gsub("x2019_20_percent", "p", names(eth)) 
+
+data <- data %>%
+    left_join(eth)
 ```
 
 ## Split and Resample
