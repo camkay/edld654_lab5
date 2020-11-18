@@ -45,21 +45,10 @@ Join the two data sets.
 If you have accessed outside data to help increase the performance of your models for the final project (e.g., [NCES](https://nces.ed.gov/)), you can read in and join those data as well.
 
 ```{r}
-train <- rio::import("data/train.csv") %>% 
-  select(-classification)
-
-eth <- rio::import(here::here("data", "fallmembershipreport_20192020.xlsx"), 
-            sheet    = "School (19-20)",
-            setclass = "tibble") %>%
-  janitor::clean_names() %>%
-  select(attnd_schl_inst_id = attending_school_id,
-         sch_name           = school_name,
-         matches("percent"))
-
-names(eth) <- gsub("x2019_20_percent", "p", names(eth)) 
-
-data <- data %>%
-    left_join(eth)
+# Uploading merged data that we saved out already
+set.seed(3000)
+data <- rio::import("data/data.csv") %>% 
+  sample_frac(.01)
 ```
 
 ## Split and Resample
@@ -69,7 +58,10 @@ Split joined data from above into a training set and test set, stratified by the
 Use 10-fold CV to resample the training set, stratified by `score`.
 
 ```{r}
-
+splits <- initial_split(data, strata = "score")
+train <- training(splits)
+test <- testing(splits)
+cv_splits <- vfold_cv(train, stata = "score")
 ```
 
 ## Preprocess
@@ -79,19 +71,35 @@ Create one `recipe` to prepare your data for CART, bagged tree, and random fores
 This lab could potentially serve as a template for your **Premilinary Fit 2**, or your final model prediction for the **Final Project**, so consider applying what might be your best model formula and the necessary preprocessing steps.
 
 ```{r}
-
-
+rec <- recipe(score ~ ., train) %>%  
+    step_mutate(tst_dt     = lubridate::mdy_hm(tst_dt)) %>%
+    update_role(contains("id"), ncessch, sch_name, new_role = "id vars") %>%
+    step_novel(all_nominal()) %>%
+    step_unknown(all_nominal()) %>%
+    step_nzv(all_predictors()) %>%
+    step_normalize(all_numeric(), -all_outcomes(), -has_role("id vars")) %>%
+    step_BoxCox(all_numeric(), -all_outcomes(), -has_role("id vars")) %>%
+    step_medianimpute(all_numeric(), -all_outcomes(), -has_role("id vars")) %>%
+    step_dummy(all_nominal(), -has_role("id vars"), one_hot = TRUE) %>%
+    step_zv(all_predictors())
 ```
 
 ## Decision Tree
 
 1. Create a `parsnip` CART model using`{rpart}` for the estimation, tuning the cost complexity and minimum $n$ for a terminal node.
 ```{r}
-
+dt_tune_mod <- decision_tree() %>% 
+  set_mode("regression") %>% 
+  set_engine("rpart") %>% 
+  set_args(cost_complexity = tune(),
+           min_n = tune())
 ```
 
 2. Create a `workflow` object that combines your `recipe` and your `parsnip` objects.
 ```{r}
+dt_tune_workflow <- workflow() %>% 
+  add_recipe(rec) %>% 
+  add_model(dt_tune_mod)
 
 ```
 
@@ -99,20 +107,35 @@ This lab could potentially serve as a template for your **Premilinary Fit 2**, o
 * Use `grid = 10` to choose 10 grid points automatically
 * In the `metrics` argument, please include `rmse`, `rsq`, and `huber_loss`
 * Record the time it takes to run. You could use `{tictoc}`, or you could do something like:
+
 ```{r, echo=TRUE, eval=FALSE}
 start_rf <- Sys.time()
+
 #code to fit model
+dt_tune_fit <- tune_grid(
+  dt_tune_workflow,
+  cv_splits,
+  grid = 10,
+  metrics = yardstick::metric_set(rmse, rsq, huber_loss),
+  control = control_resamples(verbose   = TRUE,
+                              save_pred = TRUE))
+
 end_rf <- Sys.time()
 end_rf - start_rf
 ```
 
-```{r}
-
-```
 
 4. Show the best estimates for each of the three performance metrics and the tuning parameter values associated with each.
 ```{r}
+dt_tune_fit %>% 
+  collect_metrics(summarize = FALSE) 
 
+dt_tune_fit %>% 
+  autoplot() +
+  geom_line()
+
+dt_tune_fit %>% 
+  show_best(n = 5, metric = "rmse")
 
 ```
 
