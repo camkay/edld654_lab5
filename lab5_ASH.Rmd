@@ -27,9 +27,10 @@ library(rio)
 library(here)
 library(magrittr)
 
+update_geom_defaults('path', list(color = "#E4AACC"))
+update_geom_defaults('point', list(color = "gray60"))
 theme_set(theme_minimal())
 ```
-
 
 ## Data
 
@@ -50,6 +51,8 @@ If you have accessed outside data to help increase the performance of your model
 data <- import(here::here("data", "data.csv"), setclass = "tbl_df") %>%
   janitor::clean_names() %>%
   sample_frac(.01)
+
+head(data)
 ```
 
 ## Split and Resample
@@ -89,6 +92,7 @@ rec <- recipe(score ~ ., data_train) %>%
 ## Decision Tree
 
 1. Create a `parsnip` CART model using`{rpart}` for the estimation, tuning the cost complexity and minimum $n$ for a terminal node.
+
 ```{r}
 dt_tune_mod <- decision_tree() %>% 
   set_mode("regression") %>% 
@@ -108,6 +112,7 @@ dt_tune_workflow <- workflow() %>%
 * Use `grid = 10` to choose 10 grid points automatically
 * In the `metrics` argument, please include `rmse`, `rsq`, and `huber_loss`
 * Record the time it takes to run. You could use `{tictoc}`, or you could do something like:
+
 ```{r, echo=TRUE, eval=FALSE}
 start_rf <- Sys.time()
 
@@ -137,7 +142,13 @@ dt_tune_fit %>%
   geom_line()
 
 dt_tune_fit %>%
-  show_best(n = 5, metric = "rmse")
+  show_best(n = 3, metric = "rmse")
+
+dt_tune_fit %>%
+  show_best(n = 3, metric = "rsq") 
+
+dt_tune_fit %>%
+  show_best(n = 3, metric = "huber_loss")
 ```
 
 ## Bagged Tree
