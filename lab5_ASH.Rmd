@@ -28,7 +28,7 @@ library(here)
 library(magrittr)
 
 update_geom_defaults('path', list(color = "#E4AACC"))
-update_geom_defaults('point', list(color = "gray60"))
+update_geom_defaults('point', list(color = "#880E4F", size = 1.75)) #was grey60
 theme_set(theme_minimal())
 ```
 
@@ -81,7 +81,7 @@ rec <- recipe(score ~ ., data_train) %>%
     update_role(contains("id"), ncessch, sch_name, new_role = "id vars") %>%
     step_novel(all_nominal()) %>%
     step_unknown(all_nominal()) %>%
-    step_nzv(all_predictors()) %>%
+    step_nzv(all_predictors(), freq_cut = 99/1) %>%
     step_normalize(all_numeric(), -all_outcomes(), -has_role("id vars")) %>%
     step_BoxCox(all_numeric(), -all_outcomes(), -has_role("id vars")) %>%
     step_medianimpute(all_numeric(), -all_outcomes(), -has_role("id vars")) %>%
@@ -163,10 +163,10 @@ bag_tune_mod <- bag_tree() %>%
   set_args(cost_complexity = tune(), 
            min_n = tune()) %>% 
   set_engine("rpart", times = 10) # 10 bootstrap re-samples
-
 ```
 
 2. Create a `workflow` object that combines your `recipe` and your bagged tree model specification.
+
 ```{r}
 bag_tune_workflow <- workflow() %>%
   add_recipe(rec) %>%
@@ -185,7 +185,11 @@ bag_tune_workflow <- workflow() %>%
 1,000 models (10 folds * 10 grids * 10 models)
 
 ```{r}
-start_rf <- Sys.time()
+library(future)
+plan(multisession)
+
+library(tictoc)
+tic()
 
 bag_tune_fit <- tune_grid(
   bag_tune_workflow,
@@ -194,23 +198,28 @@ bag_tune_fit <- tune_grid(
   metrics = yardstick::metric_set(rmse, rsq, huber_loss),
   control = tune::control_resamples(verbose = TRUE,
                                     save_pred = TRUE,
-                                    extract = function(x) extract_model))
+                                    extract = function(x) extract_model(x)))
 
-#code to fit model
-end_rf <- Sys.time()
-end_rf - start_rf
+toc() # 254.446 sec elapsed
+
+plan(sequential)
 ```
 
 4. Show the single best estimates for each of the three performance metrics and the tuning parameter values associated with each.
 
 ```{r}
+select_best(bag_tune_fit, "rmse")
+select_best(bag_tune_fit, "rsq")
+select_best(bag_tune_fit, "huber_loss")
 
+bag_tune_fit %>% 
+  autoplot() +
+  geom_line()
 ```
 
 5. Run the `bag_roots` function below. Apply this function to the extracted bagged tree models from the previous step. This will output the feature at the root node for each of the decision trees fit. 
 
 ```{r, echo=TRUE}
-
 bag_roots <- function(x){
   x %>% 
   select(.extracts) %>% 
@@ -223,14 +232,23 @@ bag_roots <- function(x){
                      ~as.character(.x$fit$frame[1, 1]))) %>%
   select(root)  
 }
+
+(roots_bag_tune <- bag_roots(bag_tune_fit))
 ```
 
 6. Produce a plot of the frequency of features at the root node of the trees in your bagged model.
 
-
 ```{r}
-
-
+roots_bag_tune %>% 
+  group_by(root) %>% 
+  count() %>% 
+  ggplot(aes(n, reorder(root, n))) +
+  geom_col(fill = "#E4AACC", 
+           alpha = .70) +
+  labs(y = "Feature at Root Node",
+       x = "Frequency (n)") + 
+  theme_bw() +
+  scale_x_continuous(expand = c(0, 0))
 ```
 
 ## Random Forest
