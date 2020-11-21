@@ -29,7 +29,7 @@ library(magrittr)
 
 update_geom_defaults('path', list(color = "#E4AACC"))
 update_geom_defaults('point', list(color = "#880E4F", size = 1.75)) #was grey60
-theme_set(theme_minimal())
+theme_set(theme_bw())
 ```
 
 ## Data
@@ -102,6 +102,7 @@ dt_tune_mod <- decision_tree() %>%
 ```
 
 2. Create a `workflow` object that combines your `recipe` and your `parsnip` objects.
+
 ```{r}
 dt_tune_workflow <- workflow() %>%
   add_recipe(rec) %>%
@@ -124,7 +125,6 @@ dt_tune_fit <- tune_grid(
   control = tune::control_resamples(verbose = TRUE,
                                     save_pred = TRUE))
 
-#code to fit model
 end_rf <- Sys.time()
 end_rf - start_rf
 ```
@@ -160,9 +160,9 @@ dt_tune_fit %>%
 ```{r}
 bag_tune_mod <- bag_tree() %>% 
   set_mode("regression") %>% 
+  set_engine("rpart", times = 10) %>% # 10 bootstrap re-samples
   set_args(cost_complexity = tune(), 
-           min_n = tune()) %>% 
-  set_engine("rpart", times = 10) # 10 bootstrap re-samples
+           min_n = tune())
 ```
 
 2. Create a `workflow` object that combines your `recipe` and your bagged tree model specification.
@@ -246,8 +246,8 @@ roots_bag_tune %>%
   geom_col(fill = "#E4AACC", 
            alpha = .70) +
   labs(y = "Feature at Root Node",
-       x = "Frequency (n)") + 
-  theme_bw() +
+       x = "Frequency (n)",
+       title = "Tuned Bagged Models") + 
   scale_x_continuous(expand = c(0, 0))
 ```
 
@@ -258,12 +258,27 @@ roots_bag_tune %>%
 * specify 1,000 trees, but keep the other default tuning parameters
 
 ```{r}
+(cores <- parallel::detectCores())
 
+rf_tune_mod <- rand_forest() %>% 
+  set_mode("regression") %>%
+  set_engine("ranger",
+             num.threads = cores, 
+             importance = "permutation", 
+             verbose = TRUE) %>% 
+  set_args(mtry = tune(),
+           trees = 1000,
+           min_n = tune())
+
+#translate(rf_tune_mod)
 ```
 
 2. Create a `workflow` object that combines your `recipe` and your random forest model specification.
 ```{r}
-
+rf_tune_workflow <- 
+  workflow() %>% 
+  add_model(rf_tune_mod) %>% 
+  add_recipe(rec)
 ```
 
 3. Fit your model 
@@ -272,13 +287,31 @@ roots_bag_tune %>%
 * Record the time it takes to run
 
 ```{r}
+tictoc::tic()
 
+set.seed(3000)
+
+rf_tune_fit <- tune_grid(
+  rf_tune_workflow,
+  data_train_cv,
+  metrics = yardstick::metric_set(rmse, rsq, huber_loss),
+  control = control_resamples(verbose = TRUE,
+                              save_pred = TRUE,
+                              extract = function(x) x))
+
+tictoc::toc() #516.274 sec (aka about 9 minutes)
 ```
 
 4. Show the single best estimates for each of the three performance metrics.
 
 ```{r}
+select_best(rf_tune_fit, "rmse") #mtry = 15, min_n = 40
+select_best(rf_tune_fit, "rsq") #mtry = 15, min_n = 40
+select_best(rf_tune_fit, "huber_loss") #mtry = 22, min_n = 20
 
+rf_tune_fit %>% 
+  autoplot() +
+  geom_line()
 ```
 
 5. Run the two functions in the code chunk below. Then apply the `rf_roots` function to the results of your random forest model to output the feature at the root node for each of the decision trees fit in your random forest model. 
@@ -305,22 +338,31 @@ rf_roots <- function(x){
   unnest(cols = c(roots))
 }
 
-
+(roots_rf_tune <- rf_roots(rf_tune_fit))
 ```
 
 6. Produce a plot of the frequency of features at the root node of the trees in your bagged model.
 
 ```{r}
-
-
+roots_rf_tune %>% 
+  group_by(roots) %>% 
+  count() %>% 
+  filter(n > 400) %>% # I only want the top 15 or so 
+  ggplot(aes(n, reorder(roots, n))) +
+  geom_col(fill = "#880E4F", 
+           alpha = .60) +
+  labs(y = "Feature at Root Node",
+       x = "Frequency (n)",
+       title = "Tuned Random Forest Models") + 
+  scale_x_continuous(expand = c(0, 0),
+                     breaks = c(0, 5000, 10000, 15000, 20000, 25000 ),
+                     labels = c("0", "5,000", "10,000", "15,000", 
+                                "20,000", "25,000"))
 ```
 
 7. Please explain why the bagged tree root node figure and the random forest root node figure are different.
 
-```{r}
-
-
-```
+*Bagged tree models* generally split at variables that are most relevant to predicting the outcome variable. For instance, most of the trees will use the strongest predictor in the top split; hence trees from different resamples generally have similar structure to each other (especially at the top of the tree). Conversely, *random forest models* aim to reduce underlying strong relations across trees by splitting at a randomly selected root variable (which is limited to a random subset of the original predictors).
 
 8. Apply the `fit` function to your random forest `workflow` object and your **full** training data.
 In class we talked about the idea that bagged tree and random forest models use resampling, and one *could* use the OOB prediction error provided by the models to estimate model performance.
