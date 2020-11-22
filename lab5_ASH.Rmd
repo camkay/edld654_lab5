@@ -4,12 +4,11 @@ subtitle: "Random Forests/Bagging"
 author: "Ashley L. Miller"
 date: "11/21/2020"
 output:
-  html_document: 
-    toc: true
-    toc_float: true
-    theme: "spacelab"
-    code_folding: hide
-    df_print: paged
+  html_document:
+    theme: spacelab
+    toc: yes
+    toc_depth: 4
+    toc_float: yes
 ---
 
 ```{r setup, include=FALSE}
@@ -47,7 +46,7 @@ Join the two data sets.
 
 If you have accessed outside data to help increase the performance of your models for the final project (e.g., [NCES](https://nces.ed.gov/)), you can read in and join those data as well.
 
-```{r}
+```{r data}
 data <- import(here::here("data", "data.csv"), setclass = "tbl_df") %>%
   janitor::clean_names() %>%
   sample_frac(.01)
@@ -61,7 +60,7 @@ Split joined data from above into a training set and test set, stratified by the
 
 Use 10-fold CV to resample the training set, stratified by `score`.
 
-```{r}
+```{r split_resample}
 set.seed(3000)
 data_split <- initial_split(data, strata = "score")
 data_train <- training(data_split)
@@ -75,7 +74,7 @@ Create one `recipe` to prepare your data for CART, bagged tree, and random fores
 
 This lab could potentially serve as a template for your **Premilinary Fit 2**, or your final model prediction for the **Final Project**, so consider applying what might be your best model formula and the necessary preprocessing steps.
 
-```{r}
+```{r rec}
 rec <- recipe(score ~ ., data_train) %>%  
     step_mutate(tst_dt = lubridate::mdy_hm(tst_dt)) %>%
     update_role(contains("id"), ncessch, sch_name, new_role = "id vars") %>%
@@ -93,7 +92,7 @@ rec <- recipe(score ~ ., data_train) %>%
 
 1. Create a `parsnip` CART model using`{rpart}` for the estimation, tuning the cost complexity and minimum $n$ for a terminal node.
 
-```{r}
+```{r dt_mod}
 dt_tune_mod <- decision_tree() %>% 
   set_mode("regression") %>% 
   set_engine("rpart") %>% 
@@ -103,7 +102,7 @@ dt_tune_mod <- decision_tree() %>%
 
 2. Create a `workflow` object that combines your `recipe` and your `parsnip` objects.
 
-```{r}
+```{r dt_workflow}
 dt_tune_workflow <- workflow() %>%
   add_recipe(rec) %>%
   add_model(dt_tune_mod)
@@ -114,7 +113,7 @@ dt_tune_workflow <- workflow() %>%
 * In the `metrics` argument, please include `rmse`, `rsq`, and `huber_loss`
 * Record the time it takes to run. You could use `{tictoc}`, or you could do something like:
 
-```{r, echo=TRUE, eval=FALSE}
+```{r dt_tune, echo=TRUE, eval=FALSE}
 start_rf <- Sys.time()
 
 dt_tune_fit <- tune_grid(
@@ -131,19 +130,14 @@ end_rf - start_rf #1.45 minutes
 
 4. Show the best estimates for each of the three performance metrics and the tuning parameter values associated with each.
 
-```{r}
+```{r dt_metrics}
 dt_tune_fit %>%
   autoplot() +
   geom_line()
 
-dt_tune_fit %>%
-  show_best(n = 1, metric = "rmse") # rmse = 95.4
-
-dt_tune_fit %>%
-  show_best(n = 1, metric = "rsq") #rsq = .302
-
-dt_tune_fit %>%
-  show_best(n = 1, metric = "huber_loss") #huber loss = 74.6
+show_best(dt_tune_fit, metric = "rmse", n = 1) # rmse = 95.4
+show_best(dt_tune_fit, metric = "rsq", n = 1) #rsq = .302
+show_best(dt_tune_fit, metric = "huber_loss", n = 1) #huber loss = 74.6
 
 # in each case, a cost complexity of 0.0401 and min_n of 9 is best!  
 ```
@@ -154,7 +148,7 @@ dt_tune_fit %>%
 * specify 10 bootstrap resamples (only to keep run-time down), and 
 * tune on `cost_complexity` and `min_n`
 
-```{r}
+```{r bt_mod}
 bag_tune_mod <- bag_tree() %>% 
   set_mode("regression") %>% 
   set_engine("rpart", times = 10) %>% # 10 bootstrap re-samples
@@ -164,7 +158,7 @@ bag_tune_mod <- bag_tree() %>%
 
 2. Create a `workflow` object that combines your `recipe` and your bagged tree model specification.
 
-```{r}
+```{r bt_workflow}
 bag_tune_workflow <- workflow() %>%
   add_recipe(rec) %>%
   add_model(bag_tune_mod)
@@ -181,7 +175,7 @@ bag_tune_workflow <- workflow() %>%
 
 1,000 models (10 folds * 10 grids * 10 models)
 
-```{r}
+```{r bt_tune}
 library(future)
 plan(multisession)
 
@@ -204,21 +198,21 @@ plan(sequential)
 
 4. Show the single best estimates for each of the three performance metrics and the tuning parameter values associated with each.
 
-```{r}
-show_best(bag_tune_fit, "rmse", n = 1) #rmse = 88.7
-show_best(bag_tune_fit, "rsq", n = 1) #rsq = 0.379
-show_best(bag_tune_fit, "huber_loss", n = 1) #huber loss = 69.4
-
+```{r bt_metrics}
 bag_tune_fit %>% 
   autoplot() +
   geom_line()
+
+show_best(bag_tune_fit, "rmse", n = 1) #rmse = 88.7
+show_best(bag_tune_fit, "rsq", n = 1) #rsq = 0.379
+show_best(bag_tune_fit, "huber_loss", n = 1) #huber loss = 69.4
 
 # in each case, a cost complexity of 0.00228 and a min_n of 36 is best!
 ```
 
 5. Run the `bag_roots` function below. Apply this function to the extracted bagged tree models from the previous step. This will output the feature at the root node for each of the decision trees fit. 
 
-```{r, echo=TRUE}
+```{r bag_roots, echo=TRUE}
 bag_roots <- function(x){
   x %>% 
   select(.extracts) %>% 
@@ -237,7 +231,7 @@ bag_roots <- function(x){
 
 6. Produce a plot of the frequency of features at the root node of the trees in your bagged model.
 
-```{r}
+```{r bag_roots_plot}
 roots_bag_tune %>% 
   group_by(root) %>% 
   count() %>% 
@@ -256,7 +250,7 @@ roots_bag_tune %>%
 * use the `importance = "permutation"` argument to run variable importance
 * specify 1,000 trees, but keep the other default tuning parameters
 
-```{r}
+```{r rf_mod}
 (cores <- parallel::detectCores())
 
 rf_tune_mod <- rand_forest() %>% 
@@ -273,7 +267,7 @@ rf_tune_mod <- rand_forest() %>%
 ```
 
 2. Create a `workflow` object that combines your `recipe` and your random forest model specification.
-```{r}
+```{r rf_workflow}
 rf_tune_workflow <- 
   workflow() %>% 
   add_model(rf_tune_mod) %>% 
@@ -285,7 +279,7 @@ rf_tune_workflow <-
 * In the `control` argument, please include `extract = function(x) x` to extract the workflow from each fit
 * Record the time it takes to run
 
-```{r}
+```{r rf_tune}
 tictoc::tic()
 
 set.seed(3000)
@@ -303,7 +297,7 @@ tictoc::toc() #516.274 sec (aka about 9 minutes)
 
 4. Show the single best estimates for each of the three performance metrics.
 
-```{r}
+```{r rf_metrics}
 show_best(rf_tune_fit, "rmse", n = 1) #rmse = 86.7, mtry = 47, min_n = 30
 show_best(rf_tune_fit, "rsq", n = 1) #rsq = .413, mtry = 16, min_n = 40
 show_best(rf_tune_fit, "huber_loss", n = 1) #huber loss = 67.8 mtry = 47, min_n = 30
@@ -315,7 +309,7 @@ rf_tune_fit %>%
 
 Finally, lets include the finalized rf model adopting the best tuning metrics:
 
-```{r}
+```{r rf_final_fit}
 rf_best <- select_best(rf_tune_fit, metric = "rmse")
 
 rf_wf_final <- finalize_workflow(
@@ -338,7 +332,7 @@ collect_metrics(rf_res_final) #rmse went up to 88.4 (was 86.7) and rsq is .419 (
 
 5. Run the two functions in the code chunk below. Then apply the `rf_roots` function to the results of your random forest model to output the feature at the root node for each of the decision trees fit in your random forest model. 
 
-```{r, echo=TRUE}
+```{r rf_roots, echo=TRUE}
 rf_tree_roots <- function(x){
   map_chr(1:1000, 
            ~ranger::treeInfo(x, tree = .)[1, "splitvarName"])
@@ -364,7 +358,7 @@ rf_roots <- function(x){
 
 6. Produce a plot of the frequency of features at the root node of the trees in your bagged model.
 
-```{r}
+```{r rf_root_plot}
 roots_rf_tune %>% 
   group_by(roots) %>% 
   count() %>% 
@@ -390,7 +384,7 @@ In class we talked about the idea that bagged tree and random forest models use 
 
 * Record the time it takes to run
 
-```{r}
+```{r rf_oob_fit}
 # model used in workflow:
 # rf_tune_mod <- rand_forest() %>% 
 #   set_mode("regression") %>%
@@ -419,7 +413,7 @@ tictoc::toc() # 3.84 seconds
 
 Maybe we can't have tuning parameters in this scenario?? 
 
-```{r}
+```{r rf_default_oob_fit}
 rf_default_mod <- rand_forest() %>% 
    set_mode("regression") %>%
    set_engine("ranger",
@@ -445,7 +439,7 @@ tictoc::toc() # 8.555 seconds
 
 * Extract the oob prediction error from your fitted object. If you print your fitted object, you will see a value for *OOB prediction error (MSE)*. You can take the `sqrt()` of this value to get the *rmse*. Or you can extract it by running: `sqrt(fit-object-name-here$fit$fit$fit$prediction.error)`.
 
-```{r}
+```{r rf_oob_rmse}
 sqrt(rf_oob_tune_fit$fit$fit$fit$prediction.error) #rmse = 113.14 YIKES
 sqrt(rf_oob_default_fit$fit$fit$fit$prediction.error) #rmse = 87.71 MUCH better
 ```
