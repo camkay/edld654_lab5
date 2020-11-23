@@ -47,6 +47,7 @@ Join the two data sets.
 If you have accessed outside data to help increase the performance of your models for the final project (e.g., [NCES](https://nces.ed.gov/)), you can read in and join those data as well.
 
 ```{r data}
+#Import merged data that we saved out already
 data <- import(here::here("data", "data.csv"), setclass = "tbl_df") %>%
   janitor::clean_names() %>%
   sample_frac(.01)
@@ -113,7 +114,7 @@ dt_tune_workflow <- workflow() %>%
 * In the `metrics` argument, please include `rmse`, `rsq`, and `huber_loss`
 * Record the time it takes to run. You could use `{tictoc}`, or you could do something like:
 
-```{r dt_tune, echo=TRUE, eval=FALSE}
+```{r dt_tune, echo=TRUE}
 start_rf <- Sys.time()
 
 dt_tune_fit <- tune_grid(
@@ -121,7 +122,7 @@ dt_tune_fit <- tune_grid(
   data_train_cv,
   grid = 10,
   metrics = yardstick::metric_set(rmse, rsq, huber_loss),
-  control = tune::control_resamples(verbose = TRUE,
+  control = tune::control_resamples(verbose = FALSE, #turn off for knitted doc
                                     save_pred = TRUE))
 
 end_rf <- Sys.time()
@@ -138,8 +139,6 @@ dt_tune_fit %>%
 show_best(dt_tune_fit, metric = "rmse", n = 1) # rmse = 95.4
 show_best(dt_tune_fit, metric = "rsq", n = 1) #rsq = .302
 show_best(dt_tune_fit, metric = "huber_loss", n = 1) #huber loss = 74.6
-
-# in each case, a cost complexity of 0.0401 and min_n of 9 is best!  
 ```
 
 ## Bagged Tree
@@ -173,7 +172,7 @@ bag_tune_workflow <- workflow() %>%
 
 #### **Question: Before you run the code, how many trees will this function execute?**
 
-1,000 models (10 folds * 10 grids * 10 models)
+1,000 trees (10 folds * 10 grids * 10 models)
 
 ```{r bt_tune}
 library(future)
@@ -187,7 +186,7 @@ bag_tune_fit <- tune_grid(
   data_train_cv,
   grid = 10,
   metrics = yardstick::metric_set(rmse, rsq, huber_loss),
-  control = tune::control_resamples(verbose = TRUE,
+  control = tune::control_resamples(verbose = FALSE, #turn off for knitted doc
                                     save_pred = TRUE,
                                     extract = function(x) extract_model(x)))
 
@@ -206,8 +205,6 @@ bag_tune_fit %>%
 show_best(bag_tune_fit, "rmse", n = 1) #rmse = 88.7
 show_best(bag_tune_fit, "rsq", n = 1) #rsq = 0.379
 show_best(bag_tune_fit, "huber_loss", n = 1) #huber loss = 69.4
-
-# in each case, a cost complexity of 0.00228 and a min_n of 36 is best!
 ```
 
 5. Run the `bag_roots` function below. Apply this function to the extracted bagged tree models from the previous step. This will output the feature at the root node for each of the decision trees fit. 
@@ -258,7 +255,7 @@ rf_tune_mod <- rand_forest() %>%
   set_engine("ranger",
              num.threads = cores, 
              importance = "permutation", 
-             verbose = TRUE) %>% 
+             verbose = FALSE) %>% #turn off for knitted doc
   set_args(mtry = tune(),
            trees = 1000,
            min_n = tune())
@@ -288,7 +285,7 @@ rf_tune_fit <- tune_grid(
   rf_tune_workflow,
   data_train_cv,
   metrics = yardstick::metric_set(rmse, rsq, huber_loss),
-  control = control_resamples(verbose = TRUE,
+  control = control_resamples(verbose = FALSE, #turn off for knitted doc
                               save_pred = TRUE,
                               extract = function(x) x))
 
@@ -327,7 +324,7 @@ rf_res_final <- last_fit(rf_wf_final,
 
 tictoc::toc() # 7 seconds
 
-collect_metrics(rf_res_final) #rmse went up to 88.4 (was 86.7) and rsq is .419 (was .413)
+collect_metrics(rf_res_final)
 ```
 
 5. Run the two functions in the code chunk below. Then apply the `rf_roots` function to the results of your random forest model to output the feature at the root node for each of the decision trees fit in your random forest model. 
@@ -419,7 +416,7 @@ rf_default_mod <- rand_forest() %>%
    set_engine("ranger",
               num.threads = cores, 
               importance = "permutation", 
-              verbose = TRUE) %>% 
+              verbose = FALSE) %>% #turn off for knitted doc
    set_args(trees = 1000) #removed tuning parameters
 
 rf_default_workflow <- 
