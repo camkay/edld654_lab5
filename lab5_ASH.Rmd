@@ -130,7 +130,7 @@ dt_tune_fit <- tune_grid(
                                     save_pred = TRUE))
 
 end_rf <- Sys.time()
-end_rf - start_rf #1.34 minutes
+end_rf - start_rf #1.22 minutes
 ```
 
 4. Show the best estimates for each of the three performance metrics and the tuning parameter values associated with each.
@@ -140,9 +140,9 @@ dt_tune_fit %>%
   autoplot() +
   geom_line()
 
-show_best(dt_tune_fit, metric = "rmse", n = 1) #rmse = 94.9
-show_best(dt_tune_fit, metric = "rsq", n = 1) #rsq = .349
-show_best(dt_tune_fit, metric = "huber_loss", n = 1) #huber loss = 72.4
+show_best(dt_tune_fit, metric = "rmse", n = 1) #rmse = 92.4
+show_best(dt_tune_fit, metric = "rsq", n = 1) #rsq = .371
+show_best(dt_tune_fit, metric = "huber_loss", n = 1) #huber loss = 71.2
 ```
 
 ## Bagged Tree
@@ -208,9 +208,9 @@ bag_tune_fit %>%
   autoplot() +
   geom_line()
 
-show_best(bag_tune_fit, "rmse", n = 1) #rmse = 89
-show_best(bag_tune_fit, "rsq", n = 1) #rsq = .407
-show_best(bag_tune_fit, "huber_loss", n = 1) #huber loss = 69
+show_best(bag_tune_fit, "rmse", n = 1) #rmse = 89.3
+show_best(bag_tune_fit, "rsq", n = 1) #rsq = .404
+show_best(bag_tune_fit, "huber_loss", n = 1) #huber loss = 68.9
 ```
 
 5. Run the `bag_roots` function below. Apply this function to the extracted bagged tree models from the previous step. This will output the feature at the root node for each of the decision trees fit. 
@@ -449,9 +449,7 @@ sqrt(rf_oob_default_fit$fit$fit$fit$prediction.error) #rmse = 87.07 MUCH better
 
 * How does OOB *rmse* here compare to the mean *rmse* estimate from your 10-fold CV random forest? How might 10-fold CV influence bias-variance?
 
-I calculated two OOB *rmse* values. The first *rmse* was obtained when using the workflow object where I deleted the tuning parameters for `mtry` and `min_n`, whereas the second *rmse* was obtained when using the workflow object where I included the tuning parameters. Since the inclusion of these tuning parameters produced a series of troublesome warnings and ultimately resulted in a much larger *rmse*, I will hereafter ignore this model.
-
-The OOB *rmse* (using the workflow object where I deleted the tuning parameters) is actually quite similar to--albeit higher than--the *rmse* from our 10-fold cross validation random forest model. Given how well the data are predicted, 10-fold cross validation appears to produce models with relatively low bias (i.e., high performance). While a bias-variance trade-off would suggest that 10-fold cross validation may therefore have more variability, the variability wasn't too bad (i.e., results did not change drastically across samples--see `rf_res_final` above). As such, 10-fold cross validation seems to do a fine job resolving any trade-off between bias-variance. This makes sense considering the model fitting process repeats over 10 "folds", and each fold contains a sample in which none of the observations are repeated.
+I calculated two OOB *rmse* values. The first *rmse* was obtained when using the workflow object where I included the tuning parameters. Since the inclusion of these tuning parameters produced a series of troublesome warnings and ultimately resulted in a much larger *rmse*, I will hereafter ignore this model. The second *rmse* was obtained when using the workflow object where I deleted the tuning parameters for `mtry` and `min_n`. In this case, the OOB *rmse* (87.07) is actually quite similar to the *rmse* from our 10-fold cross validation random forest model (*rmse* = 87.5). Given how well the data are predicted, 10-fold cross validation appears to produce models with relatively low bias (i.e., high performance). While a bias-variance trade-off would suggest that 10-fold cross validation may therefore have more variability, the variability wasn't too bad. That is, the results did not change drastically when changing samples (see `rf_res_final` above). The *rmse* actually improved when conducting the final fit. As such, 10-fold cross validation seems to do a fine job resolving any trade-off between bias-variance. This makes sense considering the model fitting process repeats over 10 "folds", and each fold contains a sample in which none of the observations are repeated.
 
 ## Compare Performance 
 
