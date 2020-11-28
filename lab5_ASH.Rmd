@@ -328,7 +328,7 @@ set.seed(3000)
 rf_res_final <- last_fit(rf_wf_final,
                          split = data_split)
 
-tictoc::toc() # 5 seconds
+tictoc::toc() #5 seconds
 
 collect_metrics(rf_res_final) #rmse = 84.1; rsq = 0.47
 ```
@@ -417,27 +417,29 @@ tictoc::toc() # 3 seconds
 Maybe we can't have tuning parameters in this scenario?? 
 
 ```{r rf_default_oob_fit}
-rf_default_mod <- rand_forest() %>% 
+rf_best_mod <- rand_forest() %>% 
    set_mode("regression") %>%
    set_engine("ranger",
               num.threads = cores, 
               importance = "permutation", 
               verbose = FALSE) %>% #turn off for knitted doc
-   set_args(trees = 1000) #removed tuning parameters
+   set_args(trees = 1000,
+            mtry = 15,
+            min_n = 40) #best tuning parameters
 
-rf_default_workflow <- 
+rf_best_workflow <- 
   workflow() %>% 
-  add_model(rf_default_mod) %>% 
+  add_model(rf_best_mod) %>% 
   add_recipe(rec)
 
 tictoc::tic()
 
 set.seed(3000)
 
-rf_oob_default_fit <- fit(rf_default_workflow,
+rf_oob_best_fit <- fit(rf_best_workflow,
                        data = data)
 
-tictoc::toc() # 11 seconds
+tictoc::toc() #7 seconds
 ```
 
 * Extract the oob prediction error from your fitted object. If you print your fitted object, you will see a value for *OOB prediction error (MSE)*. You can take the `sqrt()` of this value to get the *rmse*. Or you can extract it by running: `sqrt(fit-object-name-here$fit$fit$fit$prediction.error)`.
@@ -449,7 +451,7 @@ sqrt(rf_oob_default_fit$fit$fit$fit$prediction.error) #rmse = 87.07 MUCH better
 
 * How does OOB *rmse* here compare to the mean *rmse* estimate from your 10-fold CV random forest? How might 10-fold CV influence bias-variance?
 
-I calculated two OOB *rmse* values. The first *rmse* was obtained when using the workflow object where I included the tuning parameters. Since the inclusion of these tuning parameters produced a series of troublesome warnings and ultimately resulted in a much larger *rmse*, I will hereafter ignore this model. The second *rmse* was obtained when using the workflow object where I deleted the tuning parameters for `mtry` and `min_n`. In this case, the OOB *rmse* (87.07) is actually quite similar to the *rmse* from our 10-fold cross validation random forest model (*rmse* = 87.5). Given how well the data are predicted, 10-fold cross validation appears to produce models with relatively low bias (i.e., high performance). While a bias-variance trade-off would suggest that 10-fold cross validation may therefore have more variability, the variability wasn't too bad. That is, the results did not change drastically when changing samples (see `rf_res_final` above). The *rmse* actually improved when conducting the final fit. As such, 10-fold cross validation seems to do a fine job resolving any trade-off between bias-variance. This makes sense considering the model fitting process repeats over 10 "folds", and each fold contains a sample in which none of the observations are repeated.
+I calculated two OOB *rmse* values. The first *rmse* was obtained when using the workflow object where I included the tuning parameters. Since the inclusion of these tuning parameters produced a series of troublesome warnings and ultimately resulted in a much larger *rmse*, I will hereafter ignore this model. The second *rmse* was obtained when using the workflow object where I manually inputted the best values for tuning parameters for `mtry` (15) and `min_n` (40). In this case, the OOB *rmse* (87.07) is actually quite similar to the *rmse* from our 10-fold cross validation random forest model (*rmse* = 87.5). Given how well the data are predicted, 10-fold cross validation appears to produce models with relatively low bias (i.e., high performance). The bias-variance trade-off would suggest that 10-fold cross validation may therefore have more variability. Though, the variability wasn't too bad. That is, the results did not change drastically when changing samples (see `rf_res_final` above). The *rmse* actually improved when conducting the final fit. As such, 10-fold cross validation seems to do a decent job resolving any trade-off between bias-variance. This makes sense considering the model fitting process repeats over 10 "folds", and each fold contains a sample in which none of the observations are repeated.
 
 ## Compare Performance 
 
